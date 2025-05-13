@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flappy Bird com Portais</title>
+  <style>
+    canvas {
+      background: #70c5ce;
+      display: block;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="320" height="480"></canvas>
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+let frames = 0;
+const gravity = 0.25;
+const jump = 4.6;
+const state = { current: 0, getReady: 0, game: 1, over: 2 };
+let difficultyTimer = 0;
+let shield = false;
+let shieldTimer = 0;
+
+const bird = {
+  x: 50,
+  y: 150,
+  w: 34,
+  h: 26,
+  speed: 0,
+  draw() {
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(this.x, this.y, this.w, this.h);
+  },
+  flap() {
+    this.speed = -jump;
+  },
+  update() {
+    this.speed += gravity;
+    this.y += this.speed;
+
+    if (this.y + this.h >= canvas.height) {
+      this.y = canvas.height - this.h;
+      if (state.current === state.game) state.current = state.over;
+    }
+  },
+  reset() {
+    this.speed = 0;
+    this.y = 150;
+  }
+};
+
+const blocks = {
+  list: [],
+  interval: 50,
+  speed: 1,
+  draw() {
+    this.list.forEach(b => {
+      ctx.save();
+      ctx.translate(b.x + b.w / 2, b.y + b.h / 2);
+      ctx.rotate(b.rotation);
+      ctx.fillStyle = b.color;
+      if (b.shape === "square") {
+        ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h);
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, b.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+  },
+  update() {
+    if (state.current !== state.game) return;
+
+    if (frames % 600 === 0 && this.speed < 6) {
+      this.speed += 0.5;
+      this.interval = Math.max(20, this.interval - 5);
+    }
+
+    if (frames % this.interval === 0) {
+      const size = Math.random() * 20 + 10;
+      const shapes = ["square", "circle"];
+      const colors = ["green", "blue", "red", "purple"];
+      const followPlayer = Math.random() < 0.2;
+
+      const newBlock = {
+        x: canvas.width,
+        y: Math.random() * (canvas.height - size),
+        w: size,
+        h: size,
+        dy: (Math.random() * 1.5 + 0.5) * (Math.random() < 0.5 ? 1 : -1),
+        rotation: 0,
+        rotationSpeed: (Math.random() * 0.05) * (Math.random() < 0.5 ? 1 : -1),
+        shape: shapes[Math.floor(Math.random() * shapes.length)],
+        color: colors[Math.floor(Math.random() * colors.length)],
+        scored: false,
+        followPlayer
+      };
+
+      this.list.push(newBlock);
+    }
+
+    this.list.forEach((b, index) => {
+      b.x -= this.speed;
+
+      if (b.followPlayer) {
+        b.y += (bird.y - b.y) * 0.01;
+      } else {
+        b.y += b.dy;
+        if (b.y <= 0 || b.y + b.h >= canvas.height) b.dy *= -1;
+      }
+
+      b.rotation += b.rotationSpeed;
+
+      if (
+        bird.x < b.x + b.w &&
+        bird.x + bird.w > b.x &&
+        bird.y < b.y + b.h &&
+        bird.y + bird.h > b.y
+      ) {
+        if (shield) {
+          shield = false;
+          b.scored = true;
+        } else {
+          state.current = state.over;
+        }
+      }
+
+      if (!b.scored && b.x + b.w < bird.x) {
+        b.scored = true;
+        score.value++;
+        scoreEffects.push({ x: bird.x, y: bird.y, alpha: 1 });
+      }
+
+      if (b.x + b.w < 0) this.list.splice(index, 1);
+    });
+  },
+  reset() {
+    this.list = [];
+  }
+};
+
+const powerUps = [];
+const scoreEffects = [];
+const score = { value: 0 };
+
+function drawPowerUps() {
+  powerUps.forEach(p => {
+    if (!p.collected) {
+      ctx.beginPath();
+      ctx.arc(p.x + p.w / 2, p.y + p.h / 2, p.w / 2, 0, Math.PI * 2);
+
+      if (p.type === "shield") {
+        ctx.fillStyle = "gold";
+        ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.font = "14px Arial";
+        ctx.fillText("S", p.x + 8, p.y + 22);
+      }
+
+      if (p.type === "portal") {
+        ctx.fillStyle = "violet";
+        ctx.fill();
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = "#fff";
+        ctx.font = "12px Arial";
+        ctx.fillText("P", p.x + 9, p.y + 21);
+      }
+    }
+  });
+}
+
+function drawScoreEffects() {
+  for (let i = scoreEffects.length - 1; i >= 0; i--) {
+    const e = scoreEffects[i];
+    ctx.fillStyle = `rgba(255, 255, 255, ${e.alpha})`;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+    e.alpha -= 0.05;
+    if (e.alpha <= 0) scoreEffects.splice(i, 1);
+  }
+}
+
+function draw() {
+  ctx.fillStyle = "#70c5ce";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  blocks.draw();
+  bird.draw();
+  drawPowerUps();
+  drawScoreEffects();
+
+  if (shield) {
+    ctx.strokeStyle = "gold";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(bird.x - 2, bird.y - 2, bird.w + 4, bird.h + 4);
+  }
+
+  if (state.current === state.getReady) {
+    ctx.fillStyle = "#000";
+    ctx.font = "20px Arial";
+    ctx.fillText("Toque para começar", 60, 200);
+  }
+
+  if (state.current === state.over) {
+    ctx.fillStyle = "#000";
+    ctx.font = "20px Arial";
+    ctx.fillText("Game Over! Toque para reiniciar", 20, 200);
+  }
+
+  ctx.fillStyle = "#fff";
+  ctx.font = "18px Arial";
+  ctx.fillText(`Score: ${score.value}`, 10, 25);
+}
+
+function update() {
+  bird.update();
+  blocks.update();
+
+  powerUps.forEach(p => {
+    p.x -= blocks.speed;
+
+    if (
+      !p.collected &&
+      bird.x < p.x + p.w &&
+      bird.x + bird.w > p.x &&
+      bird.y < p.y + p.h &&
+      bird.y + bird.h > p.y
+    ) {
+      p.collected = true;
+
+      if (p.type === "shield") {
+        shield = true;
+        shieldTimer = 600;
+      }
+
+      if (p.type === "portal") {
+        for (let i = 0; i < 10; i++) {
+          scoreEffects.push({
+            x: bird.x + Math.random() * bird.w,
+            y: bird.y + Math.random() * bird.h,
+            alpha: 1
+          });
+        }
+        bird.y = Math.random() * (canvas.height - bird.h);
+      }
+    }
+  });
+
+  if (shield) {
+    shieldTimer--;
+    if (shieldTimer <= 0) shield = false;
+  }
+}
+
+function loop() {
+  update();
+  draw();
+  frames++;
+  requestAnimationFrame(loop);
+}
+
+canvas.addEventListener("click", () => {
+  switch (state.current) {
+    case state.getReady:
+      state.current = state.game;
+      break;
+    case state.game:
+      bird.flap();
+      break;
+    case state.over:
+      blocks.reset();
+      powerUps.length = 0;
+      score.value = 0;
+      bird.reset();
+      state.current = state.getReady;
+      break;
+  }
+});
+
+state.current = state.getReady;
+loop();
+</script>
+</body>
+</html>
