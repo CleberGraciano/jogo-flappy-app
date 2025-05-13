@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Flappy Bird Clone</title>
+  <style>
+    canvas {
+      display: block;
+      margin: auto;
+      background: #70c5ce;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="320" height="480"></canvas>
+<script>
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  let frames = 0;
+  const gravity = 0.25;
+  const jump = 4.6;
+  const state = { current: 0, getReady: 0, game: 1, over: 2 };
+  let scoreEffects = [];
+
+  const sounds = {
+    point: new Audio("point.wav"),
+    hit: new Audio("hit.wav"),
+    flap: new Audio("flap.wav")
+  };
+
+  const bird = {
+    x: 50,
+    y: 150,
+    w: 34,
+    h: 26,
+    speed: 0,
+    draw() {
+      ctx.fillStyle = "yellow";
+      ctx.fillRect(this.x, this.y, this.w, this.h);
+    },
+    flap() {
+      this.speed = -jump;
+      sounds.flap.play();
+    },
+    update() {
+      this.speed += gravity;
+      this.y += this.speed;
+
+      if (this.y + this.h >= canvas.height) {
+        this.y = canvas.height - this.h;
+        if (state.current === state.game) {
+          state.current = state.over;
+          sounds.hit.play();
+        }
+      }
+    },
+    reset() {
+      this.speed = 0;
+      this.y = 150;
+    }
+  };
+
+  const pipes = {
+    position: [],
+    width: 50,
+    gap: 120,
+    maxYPos: -150,
+    draw() {
+      ctx.fillStyle = "green";
+      this.position.forEach(p => {
+        ctx.fillRect(p.x, p.y, this.width, canvas.height);
+        ctx.fillRect(p.x, p.y + canvas.height + this.gap, this.width, canvas.height);
+      });
+    },
+    update() {
+      if (state.current !== state.game) return;
+
+      if (frames % 100 === 0) {
+        this.position.push({
+          x: canvas.width,
+          y: this.maxYPos * (Math.random() + 1),
+          scored: false
+        });
+      }
+
+      this.position.forEach((p, index) => {
+        p.x -= 2;
+
+        // colisão
+        if (
+          bird.x + bird.w >= p.x &&
+          bird.x <= p.x + this.width &&
+          (bird.y <= p.y + canvas.height || bird.y + bird.h >= p.y + canvas.height + this.gap)
+        ) {
+          state.current = state.over;
+          sounds.hit.play();
+        }
+
+        // pontuação (centro do pássaro passou centro do cano)
+        const pipeCenter = p.x + this.width / 2;
+        const birdCenter = bird.x + bird.w / 2;
+
+        if (!p.scored && birdCenter > pipeCenter) {
+          score.value++;
+          p.scored = true;
+          sounds.point.play();
+          scoreEffects.push({ x: bird.x, y: bird.y, alpha: 1 });
+        }
+
+        // remover canos que saíram da tela
+        if (p.x + this.width <= 0) {
+          this.position.shift();
+        }
+      });
+    },
+    reset() {
+      this.position = [];
+    }
+  };
+
+  const score = {
+    value: 0,
+    best: parseInt(localStorage.getItem("bestScore")) || 0,
+    draw() {
+      ctx.fillStyle = "#fff";
+      ctx.font = "25px Arial";
+      if (state.current === state.game || state.current === state.over) {
+        ctx.fillText(`Score: ${this.value}`, 10, 30);
+      }
+      if (state.current === state.over) {
+        ctx.fillText(`Best: ${this.best}`, 10, 60);
+      }
+    },
+    reset() {
+      if (this.value > this.best) {
+        this.best = this.value;
+        localStorage.setItem("bestScore", this.best);
+      }
+      this.value = 0;
+    }
+  };
+
+  function draw() {
+    ctx.fillStyle = "#70c5ce";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    pipes.draw();
+    bird.draw();
+    score.draw();
+
+    // animação +1
+    scoreEffects.forEach((e, i) => {
+      ctx.fillStyle = `rgba(255,255,255,${e.alpha})`;
+      ctx.font = "20px Arial";
+      ctx.fillText("+1", e.x, e.y);
+      e.y -= 1;
+      e.alpha -= 0.02;
+      if (e.alpha <= 0) scoreEffects.splice(i, 1);
+    });
+
+    if (state.current === state.getReady) {
+      ctx.fillStyle = "#000";
+      ctx.font = "20px Arial";
+      ctx.fillText("Toque para começar", 60, 200);
+    }
+
+    if (state.current === state.over) {
+      ctx.fillStyle = "#000";
+      ctx.font = "20px Arial";
+      ctx.fillText("Game Over! Toque para reiniciar", 20, 200);
+    }
+  }
+
+  function update() {
+    bird.update();
+    pipes.update();
+  }
+
+  function loop() {
+    update();
+    draw();
+    frames++;
+    requestAnimationFrame(loop);
+  }
+
+  canvas.addEventListener("click", () => {
+    switch (state.current) {
+      case state.getReady:
+        state.current = state.game;
+        break;
+      case state.game:
+        bird.flap();
+        break;
+      case state.over:
+        pipes.reset();
+        bird.reset();
+        score.reset();
+        scoreEffects = [];
+        state.current = state.getReady;
+        break;
+    }
+  });
+
+  state.current = state.getReady;
+  loop();
+</script>
+</body>
+</html>
