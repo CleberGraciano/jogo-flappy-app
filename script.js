@@ -1,119 +1,104 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
-// Carregar imagens
-const sprite = {};
+let frames = 0;
+const gravity = 0.25;
+const jump = 4.6;
+const state = { current: 0, getReady: 0, game: 1, over: 2 };
 
-function loadImages() {
-  sprite.bird = new Image();
-  sprite.bird.src = "img/bird2.png";
-
-  sprite.pipeTop = new Image();
-  sprite.pipeTop.src = "img/pipe-top.png";
-
-  sprite.pipeBottom = new Image();
-  sprite.pipeBottom.src = "img/pipe-botton.png";
-
-  sprite.background = new Image();
-  sprite.background.src = "img/background.png";
-}
-
-loadImages();
-
-// Pássaro
 const bird = {
   x: 50,
   y: 150,
   w: 34,
   h: 26,
-  gravity: 0.6,
-  lift: -10,
-  velocity: 0,
+  frame: 0,
+  speed: 0,
   draw() {
-    ctx.drawImage(sprite.bird, this.x, this.y);
-  },
-  update() {
-    this.velocity += this.gravity;
-    this.y += this.velocity;
-
-    if (this.y + this.h > canvas.height) {
-      this.y = canvas.height - this.h;
-      this.velocity = 0;
-    }
-
-    if (this.y < 0) {
-      this.y = 0;
-      this.velocity = 0;
-    }
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(this.x, this.y, this.w, this.h);
   },
   flap() {
-    this.velocity = this.lift;
+    this.speed = -jump;
+  },
+  update() {
+    this.speed += gravity;
+    this.y += this.speed;
+
+    if (this.y + this.h >= canvas.height) {
+      this.y = canvas.height - this.h;
+      if (state.current === state.game) state.current = state.over;
+    }
+  },
+  reset() {
+    this.speed = 0;
+    this.y = 150;
   }
 };
 
-// Canos
 const pipes = {
   position: [],
-  width: 52,
+  width: 50,
   gap: 120,
-  speed: 2,
-  spawnRate: 90,
-  frameCount: 0,
-
+  maxYPos: -150,
+  draw() {
+    ctx.fillStyle = "green";
+    this.position.forEach(p => {
+      // topo
+      ctx.fillRect(p.x, p.y, this.width, canvas.height);
+      // fundo
+      ctx.fillRect(p.x, p.y + canvas.height + this.gap, this.width, canvas.height);
+    });
+  },
   update() {
-    this.frameCount++;
+    if (state.current !== state.game) return;
 
-    if (this.frameCount % this.spawnRate === 0) {
-      const topY = -Math.floor(Math.random() * 150);
-      this.position.push({ x: canvas.width, y: topY });
+    if (frames % 100 === 0) {
+      this.position.push({
+        x: canvas.width,
+        y: this.maxYPos * (Math.random() + 1)
+      });
     }
 
-    this.position.forEach((p, i) => {
-      p.x -= this.speed;
-
-      // Remove canos fora da tela
-      if (p.x + this.width < 0) {
-        this.position.splice(i, 1);
-      }
-
-      // Colisão
-      if (
-        bird.x + bird.w > p.x &&
-        bird.x < p.x + this.width &&
-        (
-          bird.y < p.y + sprite.pipeTop.height ||
-          bird.y + bird.h > p.y + sprite.pipeTop.height + this.gap
-        )
-      ) {
-        resetGame();
-      }
-    });
-  },
-
-  draw() {
     this.position.forEach(p => {
-      ctx.drawImage(sprite.pipeTop, p.x, p.y);
-      ctx.drawImage(sprite.pipeBottom, p.x, p.y + sprite.pipeTop.height + this.gap);
+      p.x -= 2;
+
+      // colisão
+      if (
+        bird.x + bird.w >= p.x &&
+        bird.x <= p.x + this.width &&
+        (bird.y <= p.y + canvas.height || bird.y + bird.h >= p.y + canvas.height + this.gap)
+      ) {
+        state.current = state.over;
+      }
+
+      // remover canos que saíram da tela
+      if (p.x + this.width <= 0) {
+        this.position.shift();
+      }
     });
   },
-
   reset() {
     this.position = [];
-    this.frameCount = 0;
   }
 };
 
-function resetGame() {
-  bird.y = 150;
-  bird.velocity = 0;
-  pipes.reset();
-}
-
-// Loop principal
 function draw() {
-  ctx.drawImage(sprite.background, 0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#70c5ce";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   pipes.draw();
   bird.draw();
+
+  if (state.current === state.getReady) {
+    ctx.fillStyle = "#000";
+    ctx.font = "20px Arial";
+    ctx.fillText("Toque para começar", 60, 200);
+  }
+
+  if (state.current === state.over) {
+    ctx.fillStyle = "#000";
+    ctx.font = "20px Arial";
+    ctx.fillText("Game Over! Toque para reiniciar", 20, 200);
+  }
 }
 
 function update() {
@@ -124,17 +109,25 @@ function update() {
 function loop() {
   update();
   draw();
+  frames++;
   requestAnimationFrame(loop);
 }
 
-// Input
-document.addEventListener("keydown", function (e) {
-  if (e.code === "Space") {
-    bird.flap();
+canvas.addEventListener("click", () => {
+  switch (state.current) {
+    case state.getReady:
+      state.current = state.game;
+      break;
+    case state.game:
+      bird.flap();
+      break;
+    case state.over:
+      pipes.reset();
+      bird.reset();
+      state.current = state.getReady;
+      break;
   }
 });
 
-// Iniciar o jogo quando as imagens estiverem carregadas
-sprite.background.onload = () => {
-  loop();
-};
+state.current = state.getReady;
+loop();
